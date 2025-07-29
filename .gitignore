@@ -6,3 +6,4 @@ npm-debug.log
 # WhatsApp-web.js session files
 .wwebjs_auth/
 whatsapp-session.json
+.wwebjs_cache/  <-- ADD THIS LINE
