@@ -6,6 +6,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 
 // ------------------- Express Web Server Setup -------------------
 const app = express();
+app.use(express.json()); // IMPORTANT: This line allows Express to parse JSON request bodies
 const PORT = process.env.PORT || 3000; // Render provides PORT, local defaults to 3000
 
 let qrCodeString = 'Loading QR code...'; // Variable to store the QR code status or image data URL
@@ -39,11 +40,47 @@ app.get('/qr', (req, res) => {
     }
 });
 
+// Endpoint to send WhatsApp messages via POST request from external services (like GAS)
+app.post('/send', async (req, res) => {
+    const { number, message } = req.body;
+
+    if (!number || !message) {
+        return res.status(400).json({ error: 'Number and message are required in the request body.' });
+    }
+
+    // Format the number to WhatsApp's expected format (e.g., "2126xxxxxx@c.us")
+    // Assumes 'number' comes as a string like "2126xxxxxx"
+    const formattedNumber = number.includes('@c.us') ? number : `${number}@c.us`;
+
+    try {
+        // Ensure the WhatsApp client is ready before attempting to send a message
+        if (client.info && client.info.me && client.info.me.user) { // More robust check for client readiness
+            const sentMessage = await client.sendMessage(formattedNumber, message);
+            console.log(`[API Send] Message sent to ${formattedNumber}:`, sentMessage.id.id);
+            res.status(200).json({ success: true, id: sentMessage.id.id, message: `Message sent to ${number}` });
+        } else {
+            console.warn(`[API Send] WhatsApp client not ready. Attempted to send to ${formattedNumber}.`);
+            res.status(500).json({ error: 'WhatsApp client is not ready. Please scan QR or check bot status.', status: qrCodeString });
+        }
+    } catch (error) {
+        console.error(`[API Send] Error sending message to ${formattedNumber}:`, error);
+        // Provide more detail in the error response for debugging
+        res.status(500).json({
+            error: 'Failed to send message.',
+            details: error.message,
+            statusCode: error.statusCode || 'N/A', // Include HTTP status if available
+            responseBody: error.responseBody || 'N/A' // Include response body if available
+        });
+    }
+});
+
+
 // Start the Express web server
 app.listen(PORT, () => {
     console.log(`Web server listening on port ${PORT}`);
     console.log(`Access bot status at http://localhost:${PORT}`);
     console.log(`Access QR code at http://localhost:${PORT}/qr`);
+    console.log(`API endpoint for sending messages: http://localhost:${PORT}/send (POST request)`);
 });
 
 // ------------------- WhatsApp-web.js Bot Setup -------------------
@@ -61,7 +98,7 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process', // This helps with memory on Render free tiers (if available)
+            '--single-process', // This helps with memory on Render
             '--disable-gpu'
         ],
         headless: true // Keep this true for server environments
@@ -100,8 +137,13 @@ client.on('message', message => {
         client.info.getBatteryStatus().then(battery => {
             message.reply(`Battery: ${battery.battery}% ${battery.plugged ? '(Plugged in)' : '(Not plugged in)'}`);
         });
-    } else if (message.body === '!echo') {
-        message.reply(message.body); // Echo back the message body
+    } else if (message.body === '!echo' && message.hasQuotedMsg) {
+        message.getQuotedMessage().then(quotedMsg => {
+            message.reply(`You echoed: ${quotedMsg.body}`);
+        });
+    } else if (message.body.startsWith('!echo ')) {
+        const textToEcho = message.body.substring(6);
+        message.reply(`You echoed: ${textToEcho}`);
     }
 });
 
@@ -109,8 +151,9 @@ client.on('message', message => {
 client.on('disconnected', (reason) => {
     console.log('Client was disconnected', reason);
     qrCodeString = `Bot disconnected: ${reason}. Please restart or check logs.`;
-    // Attempt to reinitialize on disconnect (optional, handle carefully)
-    // client.initialize();
+    // IMPORTANT: In production, consider a re-initialization strategy here.
+    // For now, Render will usually restart the service, which will re-run initialize.
+    // client.initialize(); // Uncommenting this might lead to restart loops if not handled carefully
 });
 
 // Initialize the WhatsApp client
