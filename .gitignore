@@ -1,0 +1,8 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log
+.DS_Store
+
+# WhatsApp-web.js session files
+.wwebjs_auth/
+whatsapp-session.json
