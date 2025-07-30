@@ -232,7 +232,8 @@ client.on('message', async message => {
                 // Cadre, Monté_Sur Ép. Panneau
                 let cadreMountParts = [];
                 if (getVal('Cadre')) cadreMountParts.push(getVal('Cadre'));
-                if (getVal('Monté_Sur Ép. Panneau')) cadreMountParts.push(getVal('Monté_Sur Ép. Panneau'));
+				if (getVal('Monté_Sur')) cadreMountParts.push(getVal('Monté_Sur'));
+                if (getVal('Ép. Panneau')) cadreMountParts.push(getVal('Ép. Panneau'));
                 if (cadreMountParts.length > 0) replyMessageParts.push(cadreMountParts.join(', '));
 
                 // M3010 x 3 - Verticale (Seuil x Retour PVC - Charnières)
