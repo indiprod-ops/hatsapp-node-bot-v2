@@ -1,4 +1,5 @@
 
+
 // Required Node.js modules
 const express = require('express');
 const qrcode = require('qrcode'); // For generating QR code image for web display
@@ -127,8 +128,8 @@ client.on('ready', () => {
 });
 
 // Event listener for incoming messages
-client.on('message', async message => { // IMPORTANT: Changed to async
-    const chat = await message.getChat(); // Get chat object for context
+client.on('message', async message => {
+    const chat = await message.getChat();
 
     // Existing commands
     if (message.body === '!ping') {
@@ -141,20 +142,14 @@ client.on('message', async message => { // IMPORTANT: Changed to async
         const textToEcho = message.body.substring(6);
         message.reply(`You echoed: ${textToEcho}`);
     }
-    // NEW: Handle commands like "OF17001?" or "OF17001"
+    // Handle commands like "OF17001?" or "OF17001"
     else if (message.body.toUpperCase().startsWith('OF')) {
-        let orderNumber = message.body.toUpperCase().trim(); // Take the whole message as potential order number
+        let orderNumber = message.body.toUpperCase().trim();
 
         // Remove the trailing '?' if present
         if (orderNumber.endsWith('?')) {
             orderNumber = orderNumber.slice(0, -1);
         }
-
-        // Optional: Add more specific validation here if needed, e.g., using a regex
-        // if (!/^OF\d+$/.test(orderNumber)) {
-        //     message.reply('Format de commande invalide. Veuillez utiliser le format OFXXXXX (ex: OF17001 ou OF17001?).');
-        //     return;
-        // }
 
         console.log(`Received potential order command: ${orderNumber}`);
 
@@ -162,62 +157,163 @@ client.on('message', async message => { // IMPORTANT: Changed to async
             // Make the request to your Google Apps Script API
             const response = await axios.get(GAS_API_URL, {
                 params: {
-                    orderNumber: orderNumber // Pass the order number as a query parameter
+                    orderNumber: orderNumber
                 }
             });
 
-            const apiResponse = response.data; // This will be the JSON from your GAS script
+            const apiResponse = response.data;
 
             if (apiResponse.status === 'success') {
-                const data = apiResponse.data; // Cet objet 'data' contient toutes vos colonnes en tant que clés
-                let replyMessage = ``; // Message de réponse initialisé vide
+                const data = apiResponse.data;
+                let replyMessageParts = []; // Use an array to build parts and join later
 
-                // Fonction utilitaire pour formater une date en jj.mm
+                // Helper to get value or empty string
+                const getVal = (key) => data[key] || '';
+
+                // Helper to format date
                 const formatDateToDDMM = (dateValue) => {
-                    if (!dateValue) return ''; // Gérer les valeurs vides ou nulles
+                    if (!dateValue) return '';
                     try {
                         const date = new Date(dateValue);
-                        if (isNaN(date.getTime())) { // Vérifie si la date est valide
-                            return dateValue; // Si ce n'est pas une date, renvoyer la valeur originale
+                        if (isNaN(date.getTime())) {
+                            return dateValue; // If not a valid date, return original
                         }
                         const day = String(date.getDate()).padStart(2, '0');
-                        const month = String(date.getMonth() + 1).padStart(2, '0'); // Mois sont de 0-11
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
                         return `${day}.${month}`;
                     } catch (e) {
-                        return dateValue; // En cas d'erreur de conversion, renvoyer la valeur originale
+                        return dateValue;
                     }
                 };
 
-                // Section "Sans en-tête"
-                replyMessage += `*${data['Numéro'] || 'N/A'}* - ${data['Numéro Client'] || 'N/A'}\n`; // Ajout d'étoiles autour du numéro de commande
-                replyMessage += `Type: ${data['Type'] || 'N/A'} - ${data['Simple/Double'] || 'N/A'}\n`;
-                replyMessage += `Température: ${data['Température'] || 'N/A'}\n`;
-                replyMessage += `Sens: ${data['Sens'] || 'N/A'} - Détails: ${data['Détails sens'] || 'N/A'}\n`;
-                replyMessage += `Dimensions: ${data['Hauteur'] || 'N/A'} x ${data['Largeur'] || 'N/A'} x ${data['Épaisseur'] || 'N/A'}\n`;
-                replyMessage += `Revêtement Extérieur: ${data['Revêtement Extérieur'] || 'N/A'} / Intérieur: ${data['Revêtement Intérieur'] || 'N/A'}\n`;
-                replyMessage += `Protection Extérieure: ${data['Protection Extérieure'] || 'N/A'} / Intérieure: ${data['Protection Intérieure'] || 'N/A'}\n`;
-                replyMessage += `Cadre: ${data['Cadre'] || 'N/A'}, Monté sur Ép. Panneau: ${data['Monté_Sur Ép. Panneau'] || 'N/A'}\n`;
-                replyMessage += `Seuil: ${data['Seuil'] || 'N/A'}\n`;
-                replyMessage += `Retour PVC: ${data['Retour PVC'] || 'N/A'}\n`;
-                replyMessage += `Charnières: ${data['Charnières'] || 'N/A'} x Quantité: ${data['Quantité Charnières'] || 'N/A'}\n`;
-                replyMessage += `Fermeture: ${data['Fermeture'] || 'N/A'}\n`;
-                replyMessage += `Serrure: ${data['Serrure'] || 'N/A'}\n`;
-                replyMessage += `Système: ${data['Système Guide'] || 'N/A'}\n`;
-                replyMessage += `Poignée Mobile: ${data['Poignée Mobile'] || 'N/A'} / Poignée Fixe: ${data['Poignée Fixe'] || 'N/A'}\n`;
-                replyMessage += `Accessoires: ${data['Accessoires'] || 'N/A'}\n`;
-                replyMessage += `Infos: ${data['Infos'] || 'N/A'}\n`;
+                // --- Section "Sans en-tête" ---
+                // Numéro - Client
+                let lineNumClient = `*${getVal('Numéro')}*`;
+                if (getVal('Numéro Client')) lineNumClient += ` - ${getVal('Numéro Client')}`;
+                if (lineNumClient.trim() !== '*') replyMessageParts.push(lineNumClient);
+
+                // Type - Simple/Double
+                let lineTypeDouble = [];
+                if (getVal('Type')) lineTypeDouble.push(getVal('Type'));
+                if (getVal('Simple/Double')) lineTypeDouble.push(getVal('Simple/Double'));
+                if (lineTypeDouble.length > 0) replyMessageParts.push(lineTypeDouble.join(' - '));
+
+                // Température
+                let temp = getVal('Température');
+                if (temp) replyMessageParts.push(temp);
+
+                // Sens
+                let sens = getVal('Sens');
+                if (sens) replyMessageParts.push(sens);
+
+                // Détails sens (new: separate line if exists)
+                let detailsSens = getVal('Détails sens');
+                if (detailsSens) replyMessageParts.push(detailsSens);
+
+                // Hauteur x Largeur x Épaisseur
+                let dimParts = [];
+                if (getVal('Hauteur')) dimParts.push(getVal('Hauteur'));
+                if (getVal('Largeur')) dimParts.push(getVal('Largeur'));
+                if (getVal('Épaisseur')) dimParts.push(getVal('Épaisseur'));
+                if (dimParts.length > 0) replyMessageParts.push(dimParts.join(' x '));
+
+                // Revêtement Extérieur / Revêtement Intérieur
+                let revParts = [];
+                if (getVal('Revêtement Extérieur')) revParts.push(getVal('Revêtement Extérieur'));
+                if (getVal('Revêtement Intérieur')) revParts.push(getVal('Revêtement Intérieur'));
+                if (revParts.length > 0) replyMessageParts.push(revParts.join(' / '));
+
+                // Protection Extérieure / Protection Intérieure
+                let protParts = [];
+                if (getVal('Protection Extérieure')) protParts.push(getVal('Protection Extérieure'));
+                if (getVal('Protection Intérieure')) protParts.push(getVal('Protection Intérieure'));
+                if (protParts.length > 0) replyMessageParts.push(protParts.join(' / '));
+
+                // Cadre, Monté_Sur Ép. Panneau
+                let cadreMountParts = [];
+                if (getVal('Cadre')) cadreMountParts.push(getVal('Cadre'));
+                if (getVal('Monté_Sur Ép. Panneau')) cadreMountParts.push(getVal('Monté_Sur Ép. Panneau'));
+                if (cadreMountParts.length > 0) replyMessageParts.push(cadreMountParts.join(', '));
+
+                // M3010 x 3 - Verticale (Seuil x Retour PVC - Charnières)
+                let lineSeuilRetourCharnieres = '';
+                let seuilVal = getVal('Seuil');
+                let retourPvcVal = getVal('Retour PVC');
+                let charnieresVal = getVal('Charnières');
                 
-                // Séparateur avant la section "Avec entête"
-                replyMessage += `\n---\n`; 
+                if (seuilVal && retourPvcVal && charnieresVal) {
+                    lineSeuilRetourCharnieres = `${seuilVal} x ${retourPvcVal} - ${charnieresVal}`;
+                } else if (seuilVal && retourPvcVal) {
+                    lineSeuilRetourCharnieres = `${seuilVal} x ${retourPvcVal}`;
+                } else if (seuilVal && charnieresVal) {
+                    lineSeuilRetourCharnieres = `${seuilVal} - ${charnieresVal}`;
+                } else if (seuilVal) {
+                    lineSeuilRetourCharnieres = seuilVal;
+                } else if (retourPvcVal) {
+                    lineSeuilRetourCharnieres = retourPvcVal;
+                } else if (charnieresVal) {
+                    lineSeuilRetourCharnieres = charnieresVal;
+                }
+                if (lineSeuilRetourCharnieres) replyMessageParts.push(lineSeuilRetourCharnieres);
+                
+                // Emballage (Quantité Charnières)
+                let qteCharn = getVal('Quantité Charnières');
+                if (qteCharn) replyMessageParts.push(qteCharn);
 
-                // Section "Avec entête" (dates formatées)
-                replyMessage += `*Tole*: ${formatDateToDDMM(data['Tole Aluminium'])}\n`;
-                replyMessage += `*Aluminium*: ${formatDateToDDMM(data['Aluminium'])}\n`;
-                replyMessage += `*Injection*: ${formatDateToDDMM(data['Injection'])}\n`;
-                replyMessage += `*Montage*: ${formatDateToDDMM(data['Montage'])}\n`;
+                // Fermeture
+                let fermeture = getVal('Fermeture');
+                if (fermeture) replyMessageParts.push(fermeture);
+
+                // Serrure
+                let serrure = getVal('Serrure');
+                if (serrure) replyMessageParts.push(serrure);
+
+                // Système Guide
+                let systemeGuide = getVal('Système Guide');
+                if (systemeGuide) replyMessageParts.push(systemeGuide);
+
+                // Poignée Mobile / Poignée Fixe
+                let poigneeParts = [];
+                if (getVal('Poignée Mobile')) poigneeParts.push(getVal('Poignée Mobile'));
+                if (getVal('Poignée Fixe')) poigneeParts.push(getVal('Poignée Fixe'));
+                if (poigneeParts.length > 0) replyMessageParts.push(poigneeParts.join(' / '));
+
+                // Accessoires
+                let accessoires = getVal('Accessoires');
+                if (accessoires) replyMessageParts.push(accessoires);
+
+                // Infos
+                let infos = getVal('Infos');
+                if (infos) replyMessageParts.push(infos);
+
+                // --- Join first section parts ---
+                let firstSectionContent = replyMessageParts.join('\n');
+                let finalReplyMessage = firstSectionContent;
 
 
-                message.reply(replyMessage);
+                // --- Separator and Second section (Dates) ---
+                let secondSectionParts = [];
+                let toleAluminium = formatDateToDDMM(getVal('Tole Aluminium'));
+                let aluminium = formatDateToDDMM(getVal('Aluminium'));
+                let injection = formatDateToDDMM(getVal('Injection'));
+                let montage = formatDateToDDMM(getVal('Montage'));
+
+                // Always push the title, even if value is empty, as per example
+                secondSectionParts.push(`*Tole*: ${toleAluminium}`);
+                secondSectionParts.push(`*Aluminium*: ${aluminium}`);
+                secondSectionParts.push(`*Injection*: ${injection}`);
+                secondSectionParts.push(`*Montage*: ${montage}`);
+                
+                let secondSectionContent = secondSectionParts.join('\n');
+                
+                // Add separator and second section content if either section has content
+                if (firstSectionContent || secondSectionContent.trim() !== '*Tole*: \n*Aluminium*: \n*Injection*: \n*Montage*: ') { // Check if second section is not just empty titles
+                    if (finalReplyMessage) finalReplyMessage += `\n`; // Add newline only if first section exists
+                    finalReplyMessage += `\n---\n`; 
+                    finalReplyMessage += secondSectionContent;
+                }
+
+                message.reply(finalReplyMessage.trim()); // Trim final message to remove any leading/trailing newlines
             } else if (apiResponse.status === 'not_found') {
                 message.reply(`Numéro de commande '${orderNumber}' introuvable. Veuillez vérifier et réessayer.`);
             } else {
