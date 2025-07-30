@@ -1,3 +1,4 @@
+
 // Required Node.js modules
 const express = require('express');
 const qrcode = require('qrcode'); // For generating QR code image for web display
@@ -168,16 +169,54 @@ client.on('message', async message => { // IMPORTANT: Changed to async
             const apiResponse = response.data; // This will be the JSON from your GAS script
 
             if (apiResponse.status === 'success') {
-                const data = apiResponse.data;
-                let replyMessage = `*Détails de la commande ${orderNumber}*:\n\n`;
+                const data = apiResponse.data; // Cet objet 'data' contient toutes vos colonnes en tant que clés
+                let replyMessage = ``; // Message de réponse initialisé vide
 
-                // Loop through all keys (column headers) and values in the response data
-                // This builds a clean message from all columns
-                for (const key in data) {
-                    if (Object.hasOwnProperty.call(data, key)) {
-                        replyMessage += `*${key}*: ${data[key]}\n`;
+                // Fonction utilitaire pour formater une date en jj.mm
+                const formatDateToDDMM = (dateValue) => {
+                    if (!dateValue) return ''; // Gérer les valeurs vides ou nulles
+                    try {
+                        const date = new Date(dateValue);
+                        if (isNaN(date.getTime())) { // Vérifie si la date est valide
+                            return dateValue; // Si ce n'est pas une date, renvoyer la valeur originale
+                        }
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const month = String(date.getMonth() + 1).padStart(2, '0'); // Mois sont de 0-11
+                        return `${day}.${month}`;
+                    } catch (e) {
+                        return dateValue; // En cas d'erreur de conversion, renvoyer la valeur originale
                     }
-                }
+                };
+
+                // Section "Sans en-tête"
+                replyMessage += `*${data['Numéro'] || 'N/A'}* - ${data['Numéro Client'] || 'N/A'}\n`; // Ajout d'étoiles autour du numéro de commande
+                replyMessage += `Type: ${data['Type'] || 'N/A'} - ${data['Simple/Double'] || 'N/A'}\n`;
+                replyMessage += `Température: ${data['Température'] || 'N/A'}\n`;
+                replyMessage += `Sens: ${data['Sens'] || 'N/A'} - Détails: ${data['Détails sens'] || 'N/A'}\n`;
+                replyMessage += `Dimensions: ${data['Hauteur'] || 'N/A'} x ${data['Largeur'] || 'N/A'} x ${data['Épaisseur'] || 'N/A'}\n`;
+                replyMessage += `Revêtement Extérieur: ${data['Revêtement Extérieur'] || 'N/A'} / Intérieur: ${data['Revêtement Intérieur'] || 'N/A'}\n`;
+                replyMessage += `Protection Extérieure: ${data['Protection Extérieure'] || 'N/A'} / Intérieure: ${data['Protection Intérieure'] || 'N/A'}\n`;
+                replyMessage += `Cadre: ${data['Cadre'] || 'N/A'}, Monté sur Ép. Panneau: ${data['Monté_Sur Ép. Panneau'] || 'N/A'}\n`;
+                replyMessage += `Seuil: ${data['Seuil'] || 'N/A'}\n`;
+                replyMessage += `Retour PVC: ${data['Retour PVC'] || 'N/A'}\n`;
+                replyMessage += `Charnières: ${data['Charnières'] || 'N/A'} x Quantité: ${data['Quantité Charnières'] || 'N/A'}\n`;
+                replyMessage += `Fermeture: ${data['Fermeture'] || 'N/A'}\n`;
+                replyMessage += `Serrure: ${data['Serrure'] || 'N/A'}\n`;
+                replyMessage += `Système: ${data['Système Guide'] || 'N/A'}\n`;
+                replyMessage += `Poignée Mobile: ${data['Poignée Mobile'] || 'N/A'} / Poignée Fixe: ${data['Poignée Fixe'] || 'N/A'}\n`;
+                replyMessage += `Accessoires: ${data['Accessoires'] || 'N/A'}\n`;
+                replyMessage += `Infos: ${data['Infos'] || 'N/A'}\n`;
+                
+                // Séparateur avant la section "Avec entête"
+                replyMessage += `\n---\n`; 
+
+                // Section "Avec entête" (dates formatées)
+                replyMessage += `*Tole*: ${formatDateToDDMM(data['Tole Aluminium'])}\n`;
+                replyMessage += `*Aluminium*: ${formatDateToDDMM(data['Aluminium'])}\n`;
+                replyMessage += `*Injection*: ${formatDateToDDMM(data['Injection'])}\n`;
+                replyMessage += `*Montage*: ${formatDateToDDMM(data['Montage'])}\n`;
+
+
                 message.reply(replyMessage);
             } else if (apiResponse.status === 'not_found') {
                 message.reply(`Numéro de commande '${orderNumber}' introuvable. Veuillez vérifier et réessayer.`);
