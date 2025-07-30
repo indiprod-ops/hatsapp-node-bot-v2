@@ -9,7 +9,7 @@ const axios = require('axios'); // For making HTTP requests to your GAS API
 
 // ------------------- Configuration Variables -------------------
 // IMPORTANT: Replace this with your actual GAS Web App URL
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxkryh7GxaatnZNVQsggYQCID8G7I9-pC95TYW5m3dcAECPl6V6tKEtxwY2c68SZ_ZF/exec"; 
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxkryh7GxaatnZNVQsggYQCID8G7I9-pC95TYW5m3dcAECPl6V6tKEtxwY2c68SZ_ZF/execy"; 
 
 // ------------------- Express Web Server Setup -------------------
 const app = express();
@@ -232,37 +232,38 @@ client.on('message', async message => {
                 // Cadre, Monté_Sur Ép. Panneau
                 let cadreMountParts = [];
                 if (getVal('Cadre')) cadreMountParts.push(getVal('Cadre'));
-				if (getVal('Monté_Sur')) cadreMountParts.push(getVal('Monté_Sur'));
-                if (getVal('Ép. Panneau')) cadreMountParts.push(getVal('Ép. Panneau'));
+                // Make sure this matches your exact Google Sheet header for Ép. Panneau
+                if (getVal('Monté_Sur')) cadreMountParts.push(getVal('Monté_Sur')); 
+                if (getVal('Ép. Panneau')) cadreMountParts.push(getVal('Ép. Panneau')); 
                 if (cadreMountParts.length > 0) replyMessageParts.push(cadreMountParts.join(', '));
 
-                // Seuil
-let seuil = getVal('Seuil');
-if (seuil) replyMessageParts.push(seuil);
+                // Seuil (now on its own line)
+                let seuil = getVal('Seuil');
+                if (seuil) replyMessageParts.push(seuil);
 
-// Retour PVC
-let retourPvc = getVal('Retour PVC');
-if (retourPvc) replyMessageParts.push(retourPvc);
+                // Retour PVC (now on its own line)
+                let retourPvc = getVal('Retour PVC');
+                if (retourPvc) replyMessageParts.push(retourPvc);
 
-// Charnières
-let charnieres = getVal('Charnières');
-if (charnieres) replyMessageParts.push(charnieres);
+                // Charnières (now on its own line)
+                let charnieres = getVal('Charnières');
+                if (charnieres) replyMessageParts.push(charnieres);
+                
+                // Emballage (Quantité Charnières) - remains on its own line
+                let qteCharn = getVal('Quantité Charnières');
+                if (qteCharn) replyMessageParts.push(qteCharn);
 
-// Emballage (Quantité Charnières) - reste sur sa propre ligne
-let qteCharn = getVal('Quantité Charnières');
-if (qteCharn) replyMessageParts.push(qteCharn);
+                // Fermeture
+                let fermeture = getVal('Fermeture');
+                if (fermeture) replyMessageParts.push(fermeture);
 
-// Fermeture
-let fermeture = getVal('Fermeture');
-if (fermeture) replyMessageParts.push(fermeture);
+                // Serrure
+                let serrure = getVal('Serrure');
+                if (serrure) replyMessageParts.push(serrure);
 
-// Serrure
-let serrure = getVal('Serrure');
-if (serrure) replyMessageParts.push(serrure);
-
-// Système Guide
-let systemeGuide = getVal('Système Guide');
-if (systemeGuide) replyMessageParts.push(systemeGuide);
+                // Système Guide
+                let systemeGuide = getVal('Système Guide');
+                if (systemeGuide) replyMessageParts.push(systemeGuide);
 
                 // Poignée Mobile / Poignée Fixe
                 let poigneeParts = [];
@@ -299,7 +300,8 @@ if (systemeGuide) replyMessageParts.push(systemeGuide);
                 let secondSectionContent = secondSectionParts.join('\n');
                 
                 // Add separator and second section content if either section has content
-                if (firstSectionContent || secondSectionContent.trim() !== '*Tole*: \n*Aluminium*: \n*Injection*: \n*Montage*: ') { // Check if second section is not just empty titles
+                // The check for secondSectionContent ensures we don't add separator if it's just empty titles
+                if (firstSectionContent || secondSectionContent.trim() !== '*Tole*: \n*Aluminium*: \n*Injection*: \n*Montage*: ') {
                     if (finalReplyMessage) finalReplyMessage += `\n`; // Add newline only if first section exists
                     finalReplyMessage += `\n---\n`; 
                     finalReplyMessage += secondSectionContent;
