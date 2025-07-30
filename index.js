@@ -232,37 +232,37 @@ client.on('message', async message => {
                 // Cadre, Monté_Sur Ép. Panneau
                 let cadreMountParts = [];
                 if (getVal('Cadre')) cadreMountParts.push(getVal('Cadre'));
-                // Make sure this matches your exact Google Sheet header for Ép. Panneau
-                if (getVal('Ép. Panneau')) cadreMountParts.push(getVal('Ép. Panneau')); 
+				if (getVal('Monté_Sur')) cadreMountParts.push(getVal('Monté_Sur'));
+                if (getVal('Ép. Panneau')) cadreMountParts.push(getVal('Ép. Panneau'));
                 if (cadreMountParts.length > 0) replyMessageParts.push(cadreMountParts.join(', '));
 
-                // Seuil (now on its own line)
-                let seuil = getVal('Seuil');
-                if (seuil) replyMessageParts.push(seuil);
+                // Seuil
+let seuil = getVal('Seuil');
+if (seuil) replyMessageParts.push(seuil);
 
-                // Retour PVC (now on its own line)
-                let retourPvc = getVal('Retour PVC');
-                if (retourPvc) replyMessageParts.push(retourPvc);
+// Retour PVC
+let retourPvc = getVal('Retour PVC');
+if (retourPvc) replyMessageParts.push(retourPvc);
 
-                // Charnières (now on its own line)
-                let charnieres = getVal('Charnières');
-                if (charnieres) replyMessageParts.push(charnieres);
-                
-                // Emballage (Quantité Charnières) - remains on its own line
-                let qteCharn = getVal('Quantité Charnières');
-                if (qteCharn) replyMessageParts.push(qteCharn);
+// Charnières
+let charnieres = getVal('Charnières');
+if (charnieres) replyMessageParts.push(charnieres);
 
-                // Fermeture
-                let fermeture = getVal('Fermeture');
-                if (fermeture) replyMessageParts.push(fermeture);
+// Emballage (Quantité Charnières) - reste sur sa propre ligne
+let qteCharn = getVal('Quantité Charnières');
+if (qteCharn) replyMessageParts.push(qteCharn);
 
-                // Serrure
-                let serrure = getVal('Serrure');
-                if (serrure) replyMessageParts.push(serrure);
+// Fermeture
+let fermeture = getVal('Fermeture');
+if (fermeture) replyMessageParts.push(fermeture);
 
-                // Système Guide
-                let systemeGuide = getVal('Système Guide');
-                if (systemeGuide) replyMessageParts.push(systemeGuide);
+// Serrure
+let serrure = getVal('Serrure');
+if (serrure) replyMessageParts.push(serrure);
+
+// Système Guide
+let systemeGuide = getVal('Système Guide');
+if (systemeGuide) replyMessageParts.push(systemeGuide);
 
                 // Poignée Mobile / Poignée Fixe
                 let poigneeParts = [];
@@ -299,8 +299,7 @@ client.on('message', async message => {
                 let secondSectionContent = secondSectionParts.join('\n');
                 
                 // Add separator and second section content if either section has content
-                // The check for secondSectionContent ensures we don't add separator if it's just empty titles
-                if (firstSectionContent || secondSectionContent.trim() !== '*Tole*: \n*Aluminium*: \n*Injection*: \n*Montage*: ') {
+                if (firstSectionContent || secondSectionContent.trim() !== '*Tole*: \n*Aluminium*: \n*Injection*: \n*Montage*: ') { // Check if second section is not just empty titles
                     if (finalReplyMessage) finalReplyMessage += `\n`; // Add newline only if first section exists
                     finalReplyMessage += `\n---\n`; 
                     finalReplyMessage += secondSectionContent;
