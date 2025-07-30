@@ -189,7 +189,7 @@ client.on('message', async message => {
                 // --- Section "Sans en-tête" ---
                 // Numéro - Client
                 let lineNumClient = `*${getVal('Numéro')}*`;
-                if (getVal('Numéro Client')) lineNumClient += ` - ${getVal('Numéro Client')}`;
+                if (getVal('Client')) lineNumClient += ` - ${getVal('Client')}`;
                 if (lineNumClient.trim() !== '*') replyMessageParts.push(lineNumClient);
 
                 // Type - Simple/Double
