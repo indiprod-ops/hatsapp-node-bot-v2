@@ -3,6 +3,11 @@ const express = require('express');
 const qrcode = require('qrcode'); // For generating QR code image for web display
 const qrcodeTerminal = require('qrcode-terminal'); // For displaying QR in terminal logs
 const { Client, LocalAuth } = require('whatsapp-web.js');
+const axios = require('axios'); // For making HTTP requests to your GAS API
+
+// ------------------- Configuration Variables -------------------
+// IMPORTANT: Replace this with your actual GAS Web App URL
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxkryh7GxaatnZNVQsggYQCID8G7I9-pC95TYW5m3dcAECPl6V6tKEtxwY2c68SZ_ZF/exec"; 
 
 // ------------------- Express Web Server Setup -------------------
 const app = express();
@@ -22,7 +27,6 @@ app.get('/', (req, res) => {
 
 // Endpoint to display the QR code as an image
 app.get('/qr', (req, res) => {
-    // Check if qrCodeString contains an image tag (meaning QR is ready)
     if (qrCodeString.startsWith('<img src="data:image/png;base64,')) {
         res.send(`
             <h1>Scan this QR Code:</h1>
@@ -31,7 +35,6 @@ app.get('/qr', (req, res) => {
             <p>Once scanned, the QR code will disappear, and the bot will show 'Client is ready!'</p>
         `);
     } else {
-        // If not an image, display the status text
         res.send(`
             <h1>Waiting for QR Code...</h1>
             <p>${qrCodeString}</p>
@@ -48,13 +51,10 @@ app.post('/send', async (req, res) => {
         return res.status(400).json({ error: 'Number and message are required in the request body.' });
     }
 
-    // Format the number to WhatsApp's expected format (e.g., "2126xxxxxx@c.us")
-    // Assumes 'number' comes as a string like "2126xxxxxx"
     const formattedNumber = number.includes('@c.us') ? number : `${number}@c.us`;
 
     try {
-        // Ensure the WhatsApp client is ready before attempting to send a message
-        if (client.info && client.info.me && client.info.me.user) { // More robust check for client readiness
+        if (client.info && client.info.me && client.info.me.user) {
             const sentMessage = await client.sendMessage(formattedNumber, message);
             console.log(`[API Send] Message sent to ${formattedNumber}:`, sentMessage.id.id);
             res.status(200).json({ success: true, id: sentMessage.id.id, message: `Message sent to ${number}` });
@@ -64,16 +64,14 @@ app.post('/send', async (req, res) => {
         }
     } catch (error) {
         console.error(`[API Send] Error sending message to ${formattedNumber}:`, error);
-        // Provide more detail in the error response for debugging
         res.status(500).json({
             error: 'Failed to send message.',
             details: error.message,
-            statusCode: error.statusCode || 'N/A', // Include HTTP status if available
-            responseBody: error.responseBody || 'N/A' // Include response body if available
+            statusCode: error.statusCode || 'N/A',
+            responseBody: error.responseBody || 'N/A'
         });
     }
 });
-
 
 // Start the Express web server
 app.listen(PORT, () => {
@@ -87,8 +85,8 @@ app.listen(PORT, () => {
 
 const client = new Client({
     authStrategy: new LocalAuth({
-        clientId: 'client-one', // A unique ID for this session
-        dataPath: '/var/data'   // CRITICAL: This MUST match your Render Disk mount path
+        clientId: 'client-one',
+        dataPath: '/var/data'
     }),
     puppeteer: {
         args: [
@@ -98,25 +96,23 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--single-process', // This helps with memory on Render
+            '--single-process',
             '--disable-gpu'
         ],
-        headless: true // Keep this true for server environments
+        headless: true
     }
 });
 
 // Event listener for when the QR code is generated
 client.on('qr', qr => {
-    qrcodeTerminal.generate(qr, { small: true }); // Display QR in terminal logs (for Render logs)
+    qrcodeTerminal.generate(qr, { small: true });
     console.log('QR RECEIVED (terminal format)');
 
-    // Generate Data URL for image to display on web page
     qrcode.toDataURL(qr, (err, url) => {
         if (err) {
             console.error('Error generating QR code image for web:', err);
             qrCodeString = 'Error generating QR code image for web.';
         } else {
-            // Update the string with the HTML <img> tag
             qrCodeString = `<img src="${url}" alt="QR Code" width="300" height="300"/>`;
             console.log('QR code image data URL generated.');
         }
@@ -126,24 +122,74 @@ client.on('qr', qr => {
 // Event listener for when the client is ready
 client.on('ready', () => {
     console.log('Client is ready!');
-    qrCodeString = 'Client is ready! You are logged in.'; // Update status for web display
+    qrCodeString = 'Client is ready! You are logged in.';
 });
 
 // Event listener for incoming messages
-client.on('message', message => {
+client.on('message', async message => { // IMPORTANT: Changed to async
+    const chat = await message.getChat(); // Get chat object for context
+
+    // Existing commands
     if (message.body === '!ping') {
         message.reply('pong');
     } else if (message.body === '!info') {
         client.info.getBatteryStatus().then(battery => {
             message.reply(`Battery: ${battery.battery}% ${battery.plugged ? '(Plugged in)' : '(Not plugged in)'}`);
         });
-    } else if (message.body === '!echo' && message.hasQuotedMsg) {
-        message.getQuotedMessage().then(quotedMsg => {
-            message.reply(`You echoed: ${quotedMsg.body}`);
-        });
     } else if (message.body.startsWith('!echo ')) {
         const textToEcho = message.body.substring(6);
         message.reply(`You echoed: ${textToEcho}`);
+    }
+    // NEW: Handle commands like "OF17001?" or "OF17001"
+    else if (message.body.toUpperCase().startsWith('OF')) {
+        let orderNumber = message.body.toUpperCase().trim(); // Take the whole message as potential order number
+
+        // Remove the trailing '?' if present
+        if (orderNumber.endsWith('?')) {
+            orderNumber = orderNumber.slice(0, -1);
+        }
+
+        // Optional: Add more specific validation here if needed, e.g., using a regex
+        // if (!/^OF\d+$/.test(orderNumber)) {
+        //     message.reply('Format de commande invalide. Veuillez utiliser le format OFXXXXX (ex: OF17001 ou OF17001?).');
+        //     return;
+        // }
+
+        console.log(`Received potential order command: ${orderNumber}`);
+
+        try {
+            // Make the request to your Google Apps Script API
+            const response = await axios.get(GAS_API_URL, {
+                params: {
+                    orderNumber: orderNumber // Pass the order number as a query parameter
+                }
+            });
+
+            const apiResponse = response.data; // This will be the JSON from your GAS script
+
+            if (apiResponse.status === 'success') {
+                const data = apiResponse.data;
+                let replyMessage = `*Détails de la commande ${orderNumber}*:\n\n`;
+
+                // Loop through all keys (column headers) and values in the response data
+                // This builds a clean message from all columns
+                for (const key in data) {
+                    if (Object.hasOwnProperty.call(data, key)) {
+                        replyMessage += `*${key}*: ${data[key]}\n`;
+                    }
+                }
+                message.reply(replyMessage);
+            } else if (apiResponse.status === 'not_found') {
+                message.reply(`Numéro de commande '${orderNumber}' introuvable. Veuillez vérifier et réessayer.`);
+            } else {
+                message.reply(`Une erreur est survenue lors de la récupération des données : ${apiResponse.message || 'Erreur inconnue de l\'API.'}`);
+                console.error('API Error Response:', apiResponse);
+            }
+
+        } catch (error) {
+            console.error('Error fetching data from GAS API:', error.message);
+            message.reply('Désolé, une erreur technique est survenue lors de la tentative de récupération des données de commande. Veuillez réessayer plus tard.');
+        }
     }
 });
 
@@ -151,9 +197,6 @@ client.on('message', message => {
 client.on('disconnected', (reason) => {
     console.log('Client was disconnected', reason);
     qrCodeString = `Bot disconnected: ${reason}. Please restart or check logs.`;
-    // IMPORTANT: In production, consider a re-initialization strategy here.
-    // For now, Render will usually restart the service, which will re-run initialize.
-    // client.initialize(); // Uncommenting this might lead to restart loops if not handled carefully
 });
 
 // Initialize the WhatsApp client
