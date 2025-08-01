@@ -10,7 +10,9 @@ const axios = require('axios'); // For making HTTP requests to your GAS API
 
 // ------------------- Configuration Variables -------------------
 // IMPORTANT: Replace this with your actual GAS Web App URL
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwh-b0VEWGQxnR-H7gXWvRfCA0rFnbbXWfTEKSFIGqYhI_-RulrgnmGS69yX2wu-e_b/exec"; 
+const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxZWvXqC-MPOxm6lq1c3DtpLH6LB33fYBjvZw1g8mIfc9k7YoYRFXqK6xj7W05NcNU/exec"; 
+
+
 // ------------------- Express Web Server Setup -------------------
 const app = express();
 app.use(express.json()); // IMPORTANT: This line allows Express to parse JSON request bodies
