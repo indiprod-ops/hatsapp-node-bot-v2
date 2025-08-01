@@ -1,5 +1,6 @@
 
 
+
 // Required Node.js modules
 const express = require('express');
 const qrcode = require('qrcode'); // For generating QR code image for web display
@@ -10,7 +11,6 @@ const axios = require('axios'); // For making HTTP requests to your GAS API
 // ------------------- Configuration Variables -------------------
 // IMPORTANT: Replace this with your actual GAS Web App URL
 const GAS_API_URL = "https://script.google.com/macros/s/AKfycbwh-b0VEWGQxnR-H7gXWvRfCA0rFnbbXWfTEKSFIGqYhI_-RulrgnmGS69yX2wu-e_b/exec"; 
-
 // ------------------- Express Web Server Setup -------------------
 const app = express();
 app.use(express.json()); // IMPORTANT: This line allows Express to parse JSON request bodies
@@ -131,19 +131,27 @@ client.on('ready', () => {
 client.on('message', async message => {
     const chat = await message.getChat();
 
-    // Existing commands
-    if (message.body === '!ping') {
-        message.reply('pong');
-    } else if (message.body === '!info') {
-        client.info.getBatteryStatus().then(battery => {
-            message.reply(`Battery: ${battery.battery}% ${battery.plugged ? '(Plugged in)' : '(Not plugged in)'}`);
-        });
-    } else if (message.body.startsWith('!echo ')) {
-        const textToEcho = message.body.substring(6);
-        message.reply(`You echoed: ${textToEcho}`);
-    }
+    // Helper to get value or empty string
+    const getVal = (key) => data[key] || '';
+
+    // Helper to format date
+    const formatDateToDDMM = (dateValue) => {
+        if (!dateValue) return '';
+        try {
+            const date = new Date(dateValue);
+            if (isNaN(date.getTime())) {
+                return dateValue; // If not a valid date, return original
+            }
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            return `${day}.${month}`;
+        } catch (e) {
+            return dateValue;
+        }
+    };
+
     // Handle commands like "OF17001?" or "OF17001"
-    else if (message.body.toUpperCase().startsWith('OF')) {
+    if (message.body.toUpperCase().startsWith('OF')) {
         let orderNumber = message.body.toUpperCase().trim();
 
         // Remove the trailing '?' if present
@@ -165,31 +173,12 @@ client.on('message', async message => {
 
             if (apiResponse.status === 'success') {
                 const data = apiResponse.data;
-                let replyMessageParts = []; // Use an array to build parts and join later
-
-                // Helper to get value or empty string
-                const getVal = (key) => data[key] || '';
-
-                // Helper to format date
-                const formatDateToDDMM = (dateValue) => {
-                    if (!dateValue) return '';
-                    try {
-                        const date = new Date(dateValue);
-                        if (isNaN(date.getTime())) {
-                            return dateValue; // If not a valid date, return original
-                        }
-                        const day = String(date.getDate()).padStart(2, '0');
-                        const month = String(date.getMonth() + 1).padStart(2, '0');
-                        return `${day}.${month}`;
-                    } catch (e) {
-                        return dateValue;
-                    }
-                };
+                let replyMessageParts = []; 
 
                 // --- Section "Sans en-tête" ---
                 // Numéro - Client
                 let lineNumClient = `*${getVal('Numéro')}*`;
-                if (getVal('Client')) lineNumClient += ` - ${getVal('Client')}`;
+                if (getVal('Numéro Client')) lineNumClient += ` - ${getVal('Numéro Client')}`;
                 if (lineNumClient.trim() !== '*') replyMessageParts.push(lineNumClient);
 
                 // Type - Simple/Double
@@ -233,7 +222,6 @@ client.on('message', async message => {
                 let cadreMountParts = [];
                 if (getVal('Cadre')) cadreMountParts.push(getVal('Cadre'));
                 // Make sure this matches your exact Google Sheet header for Ép. Panneau
-                if (getVal('Monté_Sur')) cadreMountParts.push(getVal('Monté_Sur')); 
                 if (getVal('Ép. Panneau')) cadreMountParts.push(getVal('Ép. Panneau')); 
                 if (cadreMountParts.length > 0) replyMessageParts.push(cadreMountParts.join(', '));
 
@@ -318,6 +306,49 @@ client.on('message', async message => {
         } catch (error) {
             console.error('Error fetching data from GAS API:', error.message);
             message.reply('Désolé, une erreur technique est survenue lors de la tentative de récupération des données de commande. Veuillez réessayer plus tard.');
+        }
+    }
+    // New logic for Gemini chatbot
+    else {
+        // This is where we'll handle any message that isn't a known command
+        console.log(`Sending message to Gemini API: "${message.body}"`);
+
+        try {
+            // Get the API key from the environment variable (secure!)
+            const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+            
+            if (!GEMINI_API_KEY) {
+                console.error('GEMINI_API_KEY is not set as an environment variable!');
+                message.reply("Désolé, je ne peux pas répondre pour le moment. La clé API de l'IA est manquante.");
+                return;
+            }
+
+            const geminiResponse = await axios.post(
+                `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+                {
+                    contents: [
+                        {
+                            parts: [
+                                {
+                                    text: message.body
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                }
+            );
+
+            const geminiText = geminiResponse.data.candidates[0].content.parts[0].text;
+            message.reply(geminiText);
+
+        } catch (error) {
+            console.error('Error with Gemini API:', error.response ? error.response.data : error.message);
+            message.reply("Désolé, je n'ai pas pu traiter votre demande pour le moment. L'IA a rencontré une erreur.");
         }
     }
 });
