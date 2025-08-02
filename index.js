@@ -11,6 +11,8 @@ const GAS_API_URL = process.env.GAS_API_URL;
 // Get WooCommerce API keys from environment variables (secure!)
 const WOO_CONSUMER_KEY = process.env.WOO_CONSUMER_KEY;
 const WOO_CONSUMER_SECRET = process.env.WOO_CONSUMER_SECRET;
+// Get the WooCommerce store URL from the environment variable
+const WOO_STORE_URL = process.env.WOO_STORE_URL;
 
 // ------------------- Express Web Server Setup -------------------
 const app = express();
@@ -130,14 +132,14 @@ client.on('ready', () => {
 
 // Function to get product from WooCommerce API
 const getWooProduct = async (query) => {
-    if (!WOO_CONSUMER_KEY || !WOO_CONSUMER_SECRET) {
-        console.error('WooCommerce API keys are not set!');
+    if (!WOO_CONSUMER_KEY || !WOO_CONSUMER_SECRET || !WOO_STORE_URL) {
+        console.error('WooCommerce configuration is not complete!');
         return null;
     }
 
     try {
         const response = await axios.get(
-            `${GAS_API_URL.split('/exec')[0]}/wc-api/v3/products`, // Assuming you might have a different base URL for the shop
+            `${WOO_STORE_URL}/wp-json/wc/v3/products`,
             {
                 params: {
                     search: query,
@@ -147,7 +149,7 @@ const getWooProduct = async (query) => {
                 }
             }
         );
-        return response.data.products;
+        return response.data; // WooCommerce API v3 returns a `products` array directly
     } catch (error) {
         console.error('Error fetching product from WooCommerce:', error.response ? error.response.data : error.message);
         return null;
@@ -336,7 +338,7 @@ client.on('message', async message => {
             message.reply('Désolé, une erreur technique est survenue lors de la tentative de récupération des données de commande. Veuillez réessayer plus tard.');
         }
     }
-    // New logic for Gemini chatbot
+    // New logic for Gemini chatbot with WooCommerce integration
     else {
         // This is where we'll handle any message that isn't a known command
         console.log(`Sending message to Gemini API: "${message.body}"`);
@@ -362,7 +364,7 @@ client.on('message', async message => {
                         Nom du produit: ${p.name}
                         Prix: ${p.price} €
                         Description: ${p.short_description || p.description}
-                        Stock: ${p.stock_quantity ? p.stock_quantity : 'Non géré'}
+                        Stock: ${p.stock_quantity !== null ? p.stock_quantity : 'Non géré'}
                         URL: ${p.permalink}
                     `).join('\n---\n')}
                     Réponds à la question du client en utilisant ces informations.
