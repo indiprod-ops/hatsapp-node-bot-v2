@@ -7,7 +7,10 @@ const axios = require('axios'); // For making HTTP requests to your GAS API
 
 // ------------------- Configuration Variables -------------------
 // Get the GAS API URL from the environment variable (best practice)
-const GAS_API_URL = process.env.GAS_API_URL; 
+const GAS_API_URL = process.env.GAS_API_URL;
+// Get WooCommerce API keys from environment variables (secure!)
+const WOO_CONSUMER_KEY = process.env.WOO_CONSUMER_KEY;
+const WOO_CONSUMER_SECRET = process.env.WOO_CONSUMER_SECRET;
 
 // ------------------- Express Web Server Setup -------------------
 const app = express();
@@ -124,6 +127,32 @@ client.on('ready', () => {
     console.log('Client is ready!');
     qrCodeString = 'Client is ready! You are logged in.';
 });
+
+// Function to get product from WooCommerce API
+const getWooProduct = async (query) => {
+    if (!WOO_CONSUMER_KEY || !WOO_CONSUMER_SECRET) {
+        console.error('WooCommerce API keys are not set!');
+        return null;
+    }
+
+    try {
+        const response = await axios.get(
+            `${GAS_API_URL.split('/exec')[0]}/wc-api/v3/products`, // Assuming you might have a different base URL for the shop
+            {
+                params: {
+                    search: query,
+                    consumer_key: WOO_CONSUMER_KEY,
+                    consumer_secret: WOO_CONSUMER_SECRET,
+                    per_page: 5 // Limit the results to 5 products
+                }
+            }
+        );
+        return response.data.products;
+    } catch (error) {
+        console.error('Error fetching product from WooCommerce:', error.response ? error.response.data : error.message);
+        return null;
+    }
+};
 
 // Event listener for incoming messages
 client.on('message', async message => {
@@ -322,6 +351,26 @@ client.on('message', async message => {
                 return;
             }
 
+            // Check if the message is a product query
+            let productContext = '';
+            const wooProducts = await getWooProduct(message.body);
+            if (wooProducts && wooProducts.length > 0) {
+                // Format the product data for Gemini
+                productContext = `
+                    Voici les informations de produits pertinentes de ma boutique en ligne :
+                    ${wooProducts.map(p => `
+                        Nom du produit: ${p.name}
+                        Prix: ${p.price} €
+                        Description: ${p.short_description || p.description}
+                        Stock: ${p.stock_quantity ? p.stock_quantity : 'Non géré'}
+                        URL: ${p.permalink}
+                    `).join('\n---\n')}
+                    Réponds à la question du client en utilisant ces informations.
+                `;
+            }
+
+            const prompt = productContext ? `${productContext}\n\nQuestion du client : ${message.body}` : message.body;
+
             const geminiResponse = await axios.post(
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
                 {
@@ -329,7 +378,7 @@ client.on('message', async message => {
                         {
                             parts: [
                                 {
-                                    text: message.body
+                                    text: prompt
                                 }
                             ]
                         }
