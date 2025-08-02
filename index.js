@@ -10,8 +10,8 @@ const axios = require('axios'); // For making HTTP requests to your GAS API
 
 // ------------------- Configuration Variables -------------------
 // IMPORTANT: Replace this with your actual GAS Web App URL
-const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxZWvXqC-MPOxm6lq1c3DtpLH6LB33fYBjvZw1g8mIfc9k7YoYRFXqK6xj7W05NcNU/exec"; 
-
+// Get the GAS API URL from the environment variable (best practice)
+	const GAS_API_URL = process.env.GAS_API_URL;
 
 // ------------------- Express Web Server Setup -------------------
 const app = express();
@@ -326,7 +326,7 @@ client.on('message', async message => {
             }
 
             const geminiResponse = await axios.post(
-			`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+		`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
                 {
                     contents: [
                         {
