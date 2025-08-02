@@ -1,6 +1,3 @@
-
-
-
 // Required Node.js modules
 const express = require('express');
 const qrcode = require('qrcode'); // For generating QR code image for web display
@@ -9,9 +6,8 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const axios = require('axios'); // For making HTTP requests to your GAS API
 
 // ------------------- Configuration Variables -------------------
-// IMPORTANT: Replace this with your actual GAS Web App URL
 // Get the GAS API URL from the environment variable (best practice)
-	const GAS_API_URL = process.env.GAS_API_URL;
+const GAS_API_URL = process.env.GAS_API_URL; 
 
 // ------------------- Express Web Server Setup -------------------
 const app = express();
@@ -133,25 +129,6 @@ client.on('ready', () => {
 client.on('message', async message => {
     const chat = await message.getChat();
 
-    // Helper to get value or empty string
-    const getVal = (key) => data[key] || '';
-
-    // Helper to format date
-    const formatDateToDDMM = (dateValue) => {
-        if (!dateValue) return '';
-        try {
-            const date = new Date(dateValue);
-            if (isNaN(date.getTime())) {
-                return dateValue; // If not a valid date, return original
-            }
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            return `${day}.${month}`;
-        } catch (e) {
-            return dateValue;
-        }
-    };
-
     // Handle commands like "OF17001?" or "OF17001"
     if (message.body.toUpperCase().startsWith('OF')) {
         let orderNumber = message.body.toUpperCase().trim();
@@ -176,6 +153,26 @@ client.on('message', async message => {
             if (apiResponse.status === 'success') {
                 const data = apiResponse.data;
                 let replyMessageParts = []; 
+
+                // --- HELPER FUNCTIONS ARE NOW DEFINED HERE ---
+                // Helper to get value or empty string
+                const getVal = (key) => data[key] || '';
+
+                // Helper to format date
+                const formatDateToDDMM = (dateValue) => {
+                    if (!dateValue) return '';
+                    try {
+                        const date = new Date(dateValue);
+                        if (isNaN(date.getTime())) {
+                            return dateValue; // If not a valid date, return original
+                        }
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        return `${day}.${month}`;
+                    } catch (e) {
+                        return dateValue;
+                    }
+                };
 
                 // --- Section "Sans en-tête" ---
                 // Numéro - Client
@@ -326,7 +323,7 @@ client.on('message', async message => {
             }
 
             const geminiResponse = await axios.post(
-		`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
                 {
                     contents: [
                         {
