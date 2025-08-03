@@ -1,4 +1,8 @@
-// Required Node.js modules
+// Start the Express web server
+app.listen(PORT, () => {
+    console.log(`[SERVER] Serveur web en écoute sur le port ${PORT}`);
+    console.log(`[DEBUG] Endpoint de debug WooCommerce: http://localhost:${PORT}/debug/woocommerce`);
+});// Required Node.js modules
 const express = require('express');
 const qrcode = require('qrcode'); // For generating QR code image for web display
 const qrcodeTerminal = require('qrcode-terminal'); // For displaying QR in terminal logs
@@ -80,9 +84,47 @@ app.get('/qr', (req, res) => {
     }
 });
 
-// Start the Express web server
-app.listen(PORT, () => {
-    console.log(`[SERVER] Serveur web en écoute sur le port ${PORT}`);
+// Add debugging endpoint for WooCommerce
+app.get('/debug/woocommerce', async (req, res) => {
+    if (!isWooCommerceConfigured()) {
+        return res.json({
+            status: 'error',
+            message: 'WooCommerce non configuré',
+            config: {
+                hasKey: !!WOO_CONSUMER_KEY,
+                hasSecret: !!WOO_CONSUMER_SECRET,
+                hasUrl: !!WOO_STORE_URL
+            }
+        });
+    }
+
+    try {
+        const connectionTest = await testWooCommerceConnection();
+        const testProducts = await getWooProduct('test');
+        
+        res.json({
+            status: 'success',
+            connectionTest,
+            config: {
+                url: WOO_STORE_URL,
+                hasKey: !!WOO_CONSUMER_KEY,
+                hasSecret: !!WOO_CONSUMER_SECRET,
+                keyLength: WOO_CONSUMER_KEY ? WOO_CONSUMER_KEY.length : 0,
+                secretLength: WOO_CONSUMER_SECRET ? WOO_CONSUMER_SECRET.length : 0
+            },
+            testProductCount: testProducts ? testProducts.length : 0
+        });
+    } catch (error) {
+        res.json({
+            status: 'error',
+            message: error.message,
+            config: {
+                url: WOO_STORE_URL,
+                hasKey: !!WOO_CONSUMER_KEY,
+                hasSecret: !!WOO_CONSUMER_SECRET
+            }
+        });
+    }
 });
 
 // ------------------- WhatsApp-web.js Bot Setup -------------------
@@ -127,10 +169,21 @@ client.on('qr', qr => {
 });
 
 // Event listener for when the client is ready
-client.on('ready', () => {
+client.on('ready', async () => {
     console.log('[WHATSAPP] Client prêt!');
     clientStatus = 'Connecté et prêt';
     qrCodeString = 'Client prêt! Vous êtes connecté.';
+    
+    // Test WooCommerce connection on startup
+    if (isWooCommerceConfigured()) {
+        console.log('[INIT] Test de la connexion WooCommerce...');
+        const wooConnectionTest = await testWooCommerceConnection();
+        if (wooConnectionTest) {
+            console.log('[INIT] ✅ WooCommerce prêt');
+        } else {
+            console.log('[INIT] ❌ Problème avec WooCommerce');
+        }
+    }
 });
 
 // Event listener for authentication success
@@ -150,6 +203,42 @@ const isWooCommerceConfigured = () => {
     return WOO_CONSUMER_KEY && WOO_CONSUMER_SECRET && WOO_STORE_URL;
 };
 
+// Function to test WooCommerce API connection
+const testWooCommerceConnection = async () => {
+    if (!isWooCommerceConfigured()) {
+        console.warn('[WOOCOMMERCE] Configuration incomplète - test ignoré');
+        return false;
+    }
+
+    try {
+        console.log('[WOOCOMMERCE] Test de connexion...');
+        const testUrl = `${WOO_STORE_URL}/wp-json/wc/v3/system_status`;
+        
+        const response = await axios.get(testUrl, {
+            auth: {
+                username: WOO_CONSUMER_KEY,
+                password: WOO_CONSUMER_SECRET
+            },
+            timeout: 10000,
+            headers: {
+                'User-Agent': 'WhatsApp-Bot/1.0'
+            }
+        });
+
+        console.log('[WOOCOMMERCE] ✅ Connexion API réussie');
+        return true;
+    } catch (error) {
+        console.error('[WOOCOMMERCE] ❌ Échec test connexion:', {
+            message: error.message,
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            url: error.config?.url,
+            headers: error.response?.headers
+        });
+        return false;
+    }
+};
+
 // Function to get product from WooCommerce API
 const getWooProduct = async (query) => {
     console.log(`[WOOCOMMERCE] Tentative récupération produits pour: '${query}'`);
@@ -160,33 +249,68 @@ const getWooProduct = async (query) => {
     }
 
     try {
-        const searchParams = {
-            search: query,
-            consumer_key: WOO_CONSUMER_KEY,
-            consumer_secret: WOO_CONSUMER_SECRET,
-            per_page: 5,
-            status: 'publish'
-        };
-
-        console.log('[WOOCOMMERCE] URL de requête:', `${WOO_STORE_URL}/wp-json/wc/v3/products`);
+        // Clean and format the WooCommerce store URL
+        const baseUrl = WOO_STORE_URL.replace(/\/$/, ''); // Remove trailing slash
+        const apiUrl = `${baseUrl}/wp-json/wc/v3/products`;
         
-        const response = await axios.get(
-            `${WOO_STORE_URL}/wp-json/wc/v3/products`,
-            {
-                params: searchParams,
-                timeout: 10000
+        console.log('[WOOCOMMERCE] URL de requête:', apiUrl);
+        console.log('[WOOCOMMERCE] Paramètres de recherche:', { search: query, per_page: 5 });
+        
+        const response = await axios.get(apiUrl, {
+            auth: {
+                username: WOO_CONSUMER_KEY,
+                password: WOO_CONSUMER_SECRET
+            },
+            params: {
+                search: query,
+                per_page: 5,
+                status: 'publish',
+                orderby: 'relevance'
+            },
+            timeout: 15000,
+            headers: {
+                'User-Agent': 'WhatsApp-Bot/1.0',
+                'Accept': 'application/json'
             }
-        );
+        });
 
-        console.log(`[WOOCOMMERCE] ${response.data.length} produits récupérés avec succès.`);
+        console.log(`[WOOCOMMERCE] ✅ ${response.data.length} produits récupérés avec succès.`);
+        
+        // Log first product for debugging
+        if (response.data.length > 0) {
+            console.log('[WOOCOMMERCE] Premier produit:', {
+                name: response.data[0].name,
+                price: response.data[0].price,
+                stock_status: response.data[0].stock_status
+            });
+        }
+        
         return response.data;
     } catch (error) {
-        console.error('[WOOCOMMERCE] Erreur récupération produit:', {
+        console.error('[WOOCOMMERCE] ❌ Erreur récupération produit:', {
             message: error.message,
             status: error.response?.status,
             statusText: error.response?.statusText,
-            data: error.response?.data
+            data: error.response?.data,
+            url: error.config?.url,
+            method: error.config?.method
         });
+
+        // Specific error handling
+        if (error.response?.status === 404) {
+            console.error('[WOOCOMMERCE] 🔍 Erreur 404 - Vérifiez:');
+            console.error('- URL du site WooCommerce correct');
+            console.error('- Permaliens activés dans WordPress');
+            console.error('- WooCommerce REST API activé');
+        } else if (error.response?.status === 401) {
+            console.error('[WOOCOMMERCE] 🔐 Erreur 401 - Vérifiez:');
+            console.error('- Consumer Key correct');
+            console.error('- Consumer Secret correct');
+            console.error('- Permissions API suffisantes');
+        } else if (error.response?.status === 403) {
+            console.error('[WOOCOMMERCE] 🚫 Erreur 403 - Permissions insuffisantes');
+        }
+
         return null;
     }
 };
@@ -313,29 +437,58 @@ client.on('message', async message => {
 
                 if (isProductQuery && isWooCommerceConfigured()) {
                     console.log('[INTENT] Utilisateur demande des produits. Récupération WooCommerce...');
-                    const wooProducts = await getWooProduct(message.body);
+                    
+                    // Extract meaningful search terms from the message
+                    const searchTerms = message.body
+                        .toLowerCase()
+                        .replace(/[^\w\s]/g, ' ')
+                        .split(' ')
+                        .filter(word => word.length > 2 && !['produit', 'disponible', 'liste', 'prix', 'acheter'].includes(word))
+                        .join(' ')
+                        .trim();
+                    
+                    const searchQuery = searchTerms || message.body;
+                    console.log('[WOOCOMMERCE] Recherche avec termes:', searchQuery);
+                    
+                    const wooProducts = await getWooProduct(searchQuery);
 
                     if (wooProducts && wooProducts.length > 0) {
                         console.log('[WOOCOMMERCE] Produits trouvés. Formatage contexte pour Gemini.');
                         productContext = `
 Voici les informations produits pertinentes de notre boutique en ligne :
 
-${wooProducts.map(p => {
-    const price = p.price || p.regular_price || 'Prix non disponible';
+${wooProducts.map((p, index) => {
+    const price = p.price || p.regular_price || 'Prix sur demande';
+    const salePrice = p.sale_price ? ` (Prix promo: ${p.sale_price}€)` : '';
+    const description = (p.short_description || p.description || 'Pas de description disponible')
+        .replace(/<[^>]*>/g, '')
+        .replace(/&[^;]+;/g, '')
+        .substring(0, 150);
+    
     return `
 🛍️ **${p.name}**
-   💰 Prix: ${price}€
-   📝 Description: ${(p.short_description || p.description || 'Pas de description').replace(/<[^>]*>/g, '').substring(0, 200)}
-   📦 Stock: ${p.stock_status === 'instock' ? 'En stock' : 'Rupture de stock'}
-   🔗 Lien: ${p.permalink}
+   💰 Prix: ${price}€${salePrice}
+   📝Description: ${description}${description.length >= 150 ? '...' : ''}
+   📦 Stock: ${p.stock_status === 'instock' ? '✅ En stock' : '❌ Rupture de stock'}
+   🆔 SKU: ${p.sku || 'N/A'}
+   🔗 Voir le produit: ${p.permalink}
 `;
                         }).join('\n---\n')}
 
-Utilise ces informations pour répondre à la question du client. Sois commercial mais honnête. Les prix sont en euros.
+INSTRUCTIONS: Utilise ces informations pour répondre au client de manière commerciale mais honnête. 
+- Mentionne les prix en euros
+- Indique le statut du stock
+- Si un produit est en rupture, propose des alternatives si disponibles
+- Sois enthousiaste mais professionnel
+- N'invente pas d'informations non fournies
 `;
                     } else {
                         console.log('[WOOCOMMERCE] Aucun produit trouvé pour la requête.');
-                        productContext = "Aucun produit spécifique n'a été trouvé pour cette requête dans notre catalogue.";
+                        productContext = `Aucun produit spécifique n'a été trouvé pour "${searchQuery}" dans notre catalogue. 
+Suggestions pour le client:
+- Reformuler sa recherche avec d'autres mots-clés
+- Demander la liste complète des produits disponibles
+- Contacter directement pour des produits spécifiques`;
                     }
                 } else if (isProductQuery && !isWooCommerceConfigured()) {
                     productContext = "La boutique en ligne n'est pas configurée actuellement. Veuillez contacter l'administrateur.";
